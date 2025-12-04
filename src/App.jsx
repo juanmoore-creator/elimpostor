@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
-import { 
-  getAuth, 
-  signInAnonymously, 
+import {
+  getAuth,
+  signInAnonymously,
   onAuthStateChanged
 } from 'firebase/auth';
-import { 
-  getFirestore, 
-  doc, 
-  setDoc, 
-  onSnapshot, 
-  updateDoc, 
+import {
+  getFirestore,
+  doc,
+  setDoc,
+  onSnapshot,
+  updateDoc,
   getDoc,
   arrayUnion,
   collection,
@@ -19,13 +19,13 @@ import {
   orderBy,
   limit
 } from 'firebase/firestore';
-import { 
-  Users, 
-  Play, 
-  Eye, 
-  EyeOff, 
-  RefreshCw, 
-  Crown, 
+import {
+  Users,
+  Play,
+  Eye,
+  EyeOff,
+  RefreshCw,
+  Crown,
   AlertCircle,
   HelpCircle,
   Globe,
@@ -49,7 +49,7 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 // Nombre de la colección simplificado para tu versión web
-const LOBBY_COLLECTION = 'lobbies'; 
+const LOBBY_COLLECTION = 'lobbies';
 
 // --- BANCO DE PALABRAS ---
 const WORD_CATEGORIES = {
@@ -61,7 +61,7 @@ const WORD_CATEGORIES = {
 };
 
 const COLORS = [
-  "Rojo", "Azul", "Verde", "Amarillo", "Negro", "Blanco", 
+  "Rojo", "Azul", "Verde", "Amarillo", "Negro", "Blanco",
   "Rosa", "Naranja", "Violeta", "Gris", "Cian", "Lima"
 ];
 
@@ -76,7 +76,7 @@ export default function App() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [isRevealed, setIsRevealed] = useState(false);
-  
+
   // Nuevos estados
   const [isPublic, setIsPublic] = useState(true);
   const [publicRooms, setPublicRooms] = useState([]);
@@ -87,9 +87,9 @@ export default function App() {
       console.error("Auth error:", err);
       setError("Error de conexión. Recarga la página.");
     });
-    
+
     const unsubscribe = onAuthStateChanged(auth, (u) => setUser(u));
-    
+
     // Asignar nombre de color aleatorio si no tiene
     const randomColor = COLORS[Math.floor(Math.random() * COLORS.length)];
     const randomNum = Math.floor(Math.random() * 100);
@@ -104,12 +104,12 @@ export default function App() {
 
     // RUTA SIMPLIFICADA: lobbies/CODIGO
     const roomRef = doc(db, LOBBY_COLLECTION, roomCode.toUpperCase());
-    
+
     const unsubscribe = onSnapshot(roomRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         setRoomData(data);
-        
+
         // Sincronizar estado local con el estado de la sala
         if (data.status === 'PLAYING' && gameState === 'lobby') {
           setGameState('playing');
@@ -137,12 +137,13 @@ export default function App() {
   useEffect(() => {
     if (gameState !== null) return; // No escuchar si ya estamos en juego
 
+    // NOTA: Quitamos orderBy para evitar requerir un índice compuesto en Firestore.
+    // Ordenamos los resultados en el cliente.
     const q = query(
       collection(db, LOBBY_COLLECTION),
       where("isPublic", "==", true),
       where("status", "==", "WAITING"),
-      orderBy("createdAt", "desc"),
-      limit(10)
+      limit(20) // Aumentamos un poco el límite ya que ordenamos localmente
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -150,7 +151,18 @@ export default function App() {
       snapshot.forEach((doc) => {
         rooms.push(doc.data());
       });
+
+      // Ordenar por fecha de creación (más reciente primero)
+      rooms.sort((a, b) => {
+        const dateA = new Date(a.createdAt || 0);
+        const dateB = new Date(b.createdAt || 0);
+        return dateB - dateA;
+      });
+
       setPublicRooms(rooms);
+    }, (error) => {
+      console.error("Error getting public rooms:", error);
+      // No mostramos error UI para no molestar, pero logueamos
     });
 
     return () => unsubscribe();
@@ -171,11 +183,11 @@ export default function App() {
     if (!playerName.trim()) return setError("¡Necesitas un nombre!");
     setLoading(true);
     const newCode = generateRoomCode();
-    
+
     try {
       // RUTA SIMPLIFICADA
       const roomRef = doc(db, LOBBY_COLLECTION, newCode);
-      
+
       const initialData = {
         code: newCode,
         hostId: user.uid,
@@ -201,13 +213,13 @@ export default function App() {
 
   const joinRoom = async (codeToJoin) => {
     const targetCode = codeToJoin || roomCode;
-    
+
     if (!playerName.trim()) return setError("¡Necesitas un nombre!");
     if (targetCode.length !== 4) return setError("El código debe tener 4 caracteres.");
-    
+
     setLoading(true);
     const codeUpper = targetCode.toUpperCase();
-    
+
     try {
       // RUTA SIMPLIFICADA
       const roomRef = doc(db, LOBBY_COLLECTION, codeUpper);
@@ -215,20 +227,20 @@ export default function App() {
 
       if (docSnap.exists()) {
         const data = docSnap.data();
-        
+
         if (data.status === 'PLAYING') {
           setLoading(false);
           return setError("La partida ya ha comenzado.");
         }
 
         const isAlreadyIn = data.players.some(p => p.uid === user.uid);
-        
+
         if (!isAlreadyIn) {
           await updateDoc(roomRef, {
             players: arrayUnion({ uid: user.uid, name: playerName.trim(), isHost: false })
           });
         }
-        
+
         setRoomCode(codeUpper);
         setGameState('lobby');
         setError('');
@@ -244,12 +256,12 @@ export default function App() {
 
   const startGame = async () => {
     if (!roomData) return;
-    
+
     const categories = Object.keys(WORD_CATEGORIES);
     const randomCat = categories[Math.floor(Math.random() * categories.length)];
     const words = WORD_CATEGORIES[randomCat];
     const randomWord = words[Math.floor(Math.random() * words.length)];
-    
+
     const players = roomData.players;
     const randomImpostor = players[Math.floor(Math.random() * players.length)];
 
@@ -296,7 +308,7 @@ export default function App() {
           </div>
           <h1 className="text-4xl font-black text-center mb-2 tracking-tighter">EL IMPOSTOR</h1>
           <p className="text-slate-400 text-center mb-8">Descubre quién miente entre tus amigos.</p>
-          
+
           <div className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Tu Nombre</label>
@@ -321,7 +333,7 @@ export default function App() {
                 </div>
               </div>
 
-              <button 
+              <button
                 onClick={createRoom}
                 disabled={loading}
                 className="w-full bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-500 hover:to-orange-500 text-white font-bold py-4 rounded-xl shadow-lg transform transition active:scale-95 flex items-center justify-center gap-2"
@@ -346,7 +358,7 @@ export default function App() {
                 value={roomCode}
                 onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
               />
-              <button 
+              <button
                 onClick={() => joinRoom(roomCode)}
                 disabled={loading}
                 className="w-2/3 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl shadow-lg transform transition active:scale-95"
@@ -354,7 +366,7 @@ export default function App() {
                 UNIRSE
               </button>
             </div>
-            
+
             {/* LISTA DE SALAS PÚBLICAS */}
             {publicRooms.length > 0 && (
               <div className="mt-6">
@@ -398,7 +410,7 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-900 text-white p-4 font-sans">
         <div className="max-w-md mx-auto space-y-6">
-          
+
           <div className="bg-slate-800 rounded-2xl p-6 shadow-xl border border-slate-700 text-center relative overflow-hidden">
             {roomData.isPublic && (
               <div className="absolute top-2 right-2 bg-green-500/20 text-green-400 px-2 py-1 rounded text-xs font-bold flex items-center gap-1">
@@ -417,7 +429,7 @@ export default function App() {
                 Jugadores ({roomData.players.length})
               </h3>
             </div>
-            
+
             <div className="space-y-2">
               {roomData.players.map((p, idx) => (
                 <div key={idx} className="bg-slate-700/50 p-3 rounded-lg flex items-center justify-between">
@@ -434,14 +446,13 @@ export default function App() {
           </div>
 
           {isHost ? (
-            <button 
+            <button
               onClick={startGame}
               disabled={roomData.players.length < 3}
-              className={`w-full py-5 rounded-xl text-xl font-black shadow-lg flex items-center justify-center gap-3 transition-all ${
-                roomData.players.length < 3 
-                  ? 'bg-slate-700 text-slate-500 cursor-not-allowed' 
+              className={`w-full py-5 rounded-xl text-xl font-black shadow-lg flex items-center justify-center gap-3 transition-all ${roomData.players.length < 3
+                  ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
                   : 'bg-green-500 hover:bg-green-400 text-white transform active:scale-95'
-              }`}
+                }`}
             >
               <Play fill="currentColor" />
               EMPEZAR PARTIDA
@@ -451,7 +462,7 @@ export default function App() {
               Esperando a que el anfitrión inicie...
             </div>
           )}
-          
+
           <button onClick={() => setGameState(null)} className="w-full text-slate-500 py-4 hover:text-white">
             Salir de la sala
           </button>
@@ -468,7 +479,7 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-900 text-white p-4 font-sans flex flex-col items-center">
         <div className="w-full max-w-md flex-grow flex flex-col gap-6">
-          
+
           {/* Header */}
           <div className="flex justify-between items-center bg-slate-800 p-4 rounded-xl border border-slate-700">
             <div className="text-left">
@@ -484,10 +495,9 @@ export default function App() {
 
           {/* Tarjeta de Rol */}
           <div className="flex-grow flex items-center justify-center">
-            <div 
-              className={`w-full aspect-[3/4] max-h-[500px] relative rounded-3xl cursor-pointer transition-all duration-500 transform ${
-                isRevealed ? 'rotate-0' : 'rotate-1'
-              }`}
+            <div
+              className={`w-full aspect-[3/4] max-h-[500px] relative rounded-3xl cursor-pointer transition-all duration-500 transform ${isRevealed ? 'rotate-0' : 'rotate-1'
+                }`}
               onClick={() => setIsRevealed(!isRevealed)}
             >
               {/* Cara Oculta */}
@@ -499,7 +509,7 @@ export default function App() {
 
               {/* Cara Revelada */}
               <div className={`absolute inset-0 bg-slate-100 rounded-3xl shadow-2xl border-8 ${isImpostor ? 'border-red-500' : 'border-blue-500'} flex flex-col items-center justify-center p-8 text-center transition-opacity duration-300 ${!isRevealed ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-                
+
                 {isImpostor ? (
                   <>
                     <div className="bg-red-100 p-6 rounded-full mb-6 animate-bounce">
@@ -507,7 +517,7 @@ export default function App() {
                     </div>
                     <h2 className="text-4xl font-black text-red-600 mb-4 tracking-tight">¡ERES EL IMPOSTOR!</h2>
                     <p className="text-slate-600 text-lg leading-relaxed">
-                      No sabes la palabra secreta. <br/>
+                      No sabes la palabra secreta. <br />
                       <strong className="text-slate-800">Escucha</strong> a los demás, <strong className="text-slate-800">miente</strong> y trata de encajar.
                     </p>
                   </>
@@ -523,7 +533,7 @@ export default function App() {
                     </p>
                   </>
                 )}
-                
+
                 <div className="absolute bottom-8 text-slate-400 flex items-center gap-2 text-sm">
                   <Eye size={16} /> Toca para ocultar
                 </div>
@@ -533,18 +543,18 @@ export default function App() {
 
           {/* Controles del Host */}
           {isHost ? (
-             <div className="space-y-3">
-               <div className="bg-slate-800 p-4 rounded-xl text-center">
-                 <p className="text-sm text-slate-400 mb-2">Cuando terminen de discutir y votar:</p>
-                 <button 
+            <div className="space-y-3">
+              <div className="bg-slate-800 p-4 rounded-xl text-center">
+                <p className="text-sm text-slate-400 mb-2">Cuando terminen de discutir y votar:</p>
+                <button
                   onClick={resetGame}
                   className="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors"
                 >
                   <RefreshCw size={18} />
                   Terminar Ronda / Jugar de Nuevo
                 </button>
-               </div>
-             </div>
+              </div>
+            </div>
           ) : (
             <div className="text-center text-slate-500 text-sm p-4 bg-slate-800 rounded-xl">
               Esperando a que el anfitrión termine la ronda...
