@@ -18,7 +18,8 @@ import {
   where,
   orderBy,
   limit,
-  deleteDoc
+  deleteDoc,
+  getDocs
 } from 'firebase/firestore';
 import {
   Users,
@@ -193,9 +194,41 @@ export default function App() {
     return result;
   };
 
+  // LIMPIEZA DE SALAS VIEJAS
+  const cleanupOldRooms = async () => {
+    try {
+      // Buscar salas públicas para limpiar
+      const q = query(
+        collection(db, LOBBY_COLLECTION),
+        where("isPublic", "==", true)
+      );
+
+      const snapshot = await getDocs(q);
+      const now = new Date();
+      const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+
+      snapshot.forEach(async (docSnap) => {
+        const data = docSnap.data();
+        const createdAt = new Date(data.createdAt || 0);
+
+        // Si tiene más de 2 horas O no tiene jugadores
+        if ((now - createdAt > TWO_HOURS_MS) || (data.players && data.players.length === 0)) {
+          await deleteDoc(docSnap.ref);
+          console.log(`Sala ${data.code} eliminada por inactividad.`);
+        }
+      });
+    } catch (err) {
+      console.error("Error cleaning up rooms:", err);
+    }
+  };
+
   const createRoom = async () => {
     if (!playerName.trim()) return setError("¡Necesitas un nombre!");
     setLoading(true);
+
+    // Ejecutar limpieza antes de crear
+    await cleanupOldRooms();
+
     const newCode = generateRoomCode();
 
     try {
@@ -586,37 +619,4 @@ export default function App() {
                   </>
                 )}
 
-                <div className="absolute bottom-8 text-slate-400 flex items-center gap-2 text-sm">
-                  <Eye size={16} /> Toca para ocultar
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Controles del Host */}
-          {isHost ? (
-            <div className="space-y-3">
-              <div className="bg-slate-800 p-4 rounded-xl text-center">
-                <p className="text-sm text-slate-400 mb-2">Cuando terminen de discutir y votar:</p>
-                <button
-                  onClick={resetGame}
-                  className="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-colors"
-                >
-                  <RefreshCw size={18} />
-                  Terminar Ronda / Jugar de Nuevo
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="text-center text-slate-500 text-sm p-4 bg-slate-800 rounded-xl">
-              Esperando a que el anfitrión termine la ronda...
-            </div>
-          )}
-
-        </div>
-      </div>
-    );
-  }
-
-  return <div className="text-white p-10">Cargando juego...</div>;
-}
+ 
