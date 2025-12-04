@@ -17,7 +17,8 @@ import {
   query,
   where,
   orderBy,
-  limit
+  limit,
+  deleteDoc
 } from 'firebase/firestore';
 import {
   Users,
@@ -168,6 +169,19 @@ export default function App() {
     return () => unsubscribe();
   }, [gameState]);
 
+  // 4. Manejar cierre de pestaña
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (gameState && roomCode) {
+        leaveRoom();
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [gameState, roomCode, user]);
+
+
   // --- ACCIONES ---
 
   const generateRoomCode = () => {
@@ -252,6 +266,44 @@ export default function App() {
       setError("Error al unirse.");
     }
     setLoading(false);
+  };
+
+  const leaveRoom = async () => {
+    if (!roomCode || !user) return;
+
+    // Limpiar estado local inmediatamente
+    setGameState(null);
+    setRoomCode('');
+    setRoomData(null);
+
+    try {
+      const roomRef = doc(db, LOBBY_COLLECTION, roomCode);
+      const docSnap = await getDoc(roomRef);
+
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        const updatedPlayers = data.players.filter(p => p.uid !== user.uid);
+
+        if (updatedPlayers.length === 0) {
+          // Si no quedan jugadores, eliminar la sala
+          await deleteDoc(roomRef);
+        } else {
+          // Si quedan jugadores, actualizar
+          let updates = { players: updatedPlayers };
+
+          // Si el que se va era el host, asignar nuevo host
+          if (data.hostId === user.uid) {
+            updates.hostId = updatedPlayers[0].uid;
+            // Actualizar el flag isHost en el array de jugadores
+            updatedPlayers[0].isHost = true;
+          }
+
+          await updateDoc(roomRef, updates);
+        }
+      }
+    } catch (err) {
+      console.error("Error leaving room:", err);
+    }
   };
 
   const startGame = async () => {
@@ -463,7 +515,7 @@ export default function App() {
             </div>
           )}
 
-          <button onClick={() => setGameState(null)} className="w-full text-slate-500 py-4 hover:text-white">
+          <button onClick={leaveRoom} className="w-full text-slate-500 py-4 hover:text-white">
             Salir de la sala
           </button>
         </div>
