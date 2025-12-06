@@ -56,10 +56,14 @@ const LOBBY_COLLECTION = 'lobbies';
 // --- BANCO DE PALABRAS ---
 const WORD_CATEGORIES = {
   "Lugares": ["Playa", "Hospital", "Escuela", "Submarino", "Estación Espacial", "Cine", "Cementerio", "Circo", "Prisión", "Biblioteca"],
-  "Comida": ["Pizza", "Sushi", "Hamburguesa", "Tacos", "Helado", "Paella", "Chocolate", "Ensalada", "Ceviche", "Palomitas"],
   "Profesiones": ["Doctor", "Payaso", "Astronauta", "Bombero", "Profesor", "Futbolista", "Detective", "Cocinero", "Mago", "Mecánico"],
   "Animales": ["Elefante", "Pingüino", "León", "Jirafa", "Tiburón", "Águila", "Canguro", "Panda", "Murciélago", "Camaleón"],
-  "Objetos": ["Espejo", "Teléfono", "Paraguas", "Reloj", "Llaves", "Zapatos", "Mochila", "Guitarra", "Cuchillo", "Lámpara"]
+  "Objetos": ["Espejo", "Teléfono", "Paraguas", "Reloj", "Llaves", "Zapatos", "Mochila", "Guitarra", "Cuchillo", "Lámpara"],
+  
+  // Nuevas categorías agregadas
+  "Famosos Argentinos": ["Lionel Messi", "Diego Maradona", "Ricardo Darín", "Gustavo Cerati", "Papa Francisco", "Eva Perón", "Manu Ginóbili", "Charly García", "Carlos Gardel", "Mirtha Legrand"],
+  "Países": ["Argentina", "Brasil", "Japón", "Francia", "Italia", "México", "España", "Estados Unidos", "Egipto", "Australia"],
+  "Deportes": ["Fútbol", "Tenis", "Basquetbol", "Natación", "Rugby", "Boxeo", "Voleibol", "Golf", "Atletismo", "Ciclismo"]
 };
 
 const COLORS = [
